@@ -162,6 +162,15 @@ end
 
         # Refresh the line search cache
         dphi0 = _dot(gr, s)
+        if dphi0 > 0.0
+            # TODO: Reset state properly
+            # TMP FIX:
+            iteration = 1
+            for i in 1:n
+                @inbounds s[i] = -gr[i]
+            end
+            dphi0 = _dot(gr, s)
+        end
         clear!(lsr)
         push!(lsr, zero(T), f_x, dphi0)
 
