@@ -11,15 +11,15 @@ function twoloop!(s::Vector,
                   dx_history::Matrix,
                   dgr_history::Matrix,
                   m::Integer,
-                  iteration::Integer,
+                  pseudo_iteration::Integer,
                   alpha::Vector,
                   q::Vector)
     # Count number of parameters
     n = length(s)
 
     # Determine lower and upper bounds for loops
-    lower = iteration - m
-    upper = iteration - 1
+    lower = pseudo_iteration - m
+    upper = pseudo_iteration - 1
 
     # Copy gr into q for backward pass
     copy!(q, gr)
@@ -30,7 +30,7 @@ function twoloop!(s::Vector,
             continue
         end
         i = mod1(index, m)
-        @inbounds alpha[i] = rho[i] * _dot(dx_history[:, i], q)
+        @inbounds alpha[i] = rho[i] * vecdot(dx_history[:, i], q)
         for j in 1:n
             @inbounds q[j] -= alpha[i] * dgr_history[j, i]
         end
@@ -45,7 +45,7 @@ function twoloop!(s::Vector,
             continue
         end
         i = mod1(index, m)
-        @inbounds beta = rho[i] * _dot(dgr_history[:, i], s)
+        @inbounds beta = rho[i] * vecdot(dgr_history[:, i], s)
         for j in 1:n
             @inbounds s[j] += dx_history[j, i] * (alpha[i] - beta)
         end
@@ -82,7 +82,7 @@ macro lbfgstrace()
     end
 end
 
-@compat function l_bfgs{T}(d::Union{DifferentiableFunction,
+function l_bfgs{T}(d::Union{DifferentiableFunction,
                             TwiceDifferentiableFunction},
                    initial_x::Vector{T};
                    m::Integer = 10,
@@ -102,6 +102,7 @@ end
 
     # Count the total number of iterations
     iteration = 0
+    pseudo_iteration = 0
 
     # Track calls to function and gradient
     f_calls, g_calls = 0, 0
@@ -155,13 +156,22 @@ end
     while !converged && iteration < iterations
         # Increment the number of steps we've had to perform
         iteration += 1
+        pseudo_iteration += 1
 
         # Determine the L-BFGS search direction
-        twoloop!(s, gr, rho, dx_history, dgr_history, m, iteration,
+        twoloop!(s, gr, rho, dx_history, dgr_history, m, pseudo_iteration,
                  twoloop_alpha, twoloop_q)
 
         # Refresh the line search cache
-        dphi0 = _dot(gr, s)
+        dphi0 = vecdot(gr, s)
+        if dphi0 > 0.0
+            pseudo_iteration = 1
+            for i in 1:n
+                @inbounds s[i] = -gr[i]
+            end
+            dphi0 = _dot(gr, s)
+        end
+
         clear!(lsr)
         push!(lsr, zero(T), f_x, dphi0)
 
@@ -192,14 +202,14 @@ end
         end
 
         # Update the L-BFGS history of positions and gradients
-        rho_iteration = 1 / _dot(dx, dgr)
+        rho_iteration = 1 / vecdot(dx, dgr)
         if isinf(rho_iteration)
             # TODO: Introduce a formal error? There was a warning here previously
             break
         end
-        dx_history[:, mod1(iteration, m)] = dx
-        dgr_history[:, mod1(iteration, m)] = dgr
-        rho[mod1(iteration, m)] = rho_iteration
+        dx_history[:, mod1(pseudo_iteration, m)] = dx
+        dgr_history[:, mod1(pseudo_iteration, m)] = dgr
+        rho[mod1(pseudo_iteration, m)] = rho_iteration
 
         x_converged,
         f_converged,
@@ -219,7 +229,7 @@ end
     return MultivariateOptimizationResults("L-BFGS",
                                            initial_x,
                                            x,
-                                           @compat(Float64(f_x)),
+                                           Float64(f_x),
                                            iteration,
                                            iteration == iterations,
                                            x_converged,
