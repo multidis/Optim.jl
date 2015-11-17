@@ -1,8 +1,8 @@
 # Preconditioners
 #  * Empty preconditioner
 cg_precondfwd(out::Array, P::Void, A::Array) = copy!(out, A)
-cg_precondfwddot(A::Array, P::Void, B::Array) = vecdot(A, B)
-cg_precondinvdot(A::Array, P::Void, B::Array) = vecdot(A, B)
+cg_precondfwddot(A::Array, P::Void, B::Array) = dot(A, B)
+cg_precondinvdot(A::Array, P::Void, B::Array) = dot(A, B)
 
 # Diagonal preconditioner
 function cg_precondfwd(out::Array, p::Vector, A::Array)
@@ -96,9 +96,7 @@ macro cgtrace()
                     grnorm,
                     dt,
                     store_trace,
-                    show_trace,
-                    show_every,
-                    callback)
+                    show_trace)
         end
     end
 end
@@ -106,6 +104,8 @@ end
 function cg{T}(df::Union{DifferentiableFunction,
                          TwiceDifferentiableFunction},
                initial_x::Array{T};
+               constraints::AbstractConstraints = ConstraintsNone(),
+               interior::Bool = false,
                xtol::Real = convert(T,1e-32),
                ftol::Real = convert(T,1e-8),
                grtol::Real = convert(T,1e-8),
@@ -113,15 +113,15 @@ function cg{T}(df::Union{DifferentiableFunction,
                store_trace::Bool = false,
                show_trace::Bool = false,
                extended_trace::Bool = false,
-               callback = nothing,
-               show_every = 1,
                linesearch!::Function = hz_linesearch!,
                eta::Real = convert(T,0.4),
                P::Any = nothing,
                precondprep::Function = (P, x) -> nothing)
 
     # Maintain current state in x and previous state in x_previous
-    x, x_previous = copy(initial_x), copy(initial_x)
+    x = copy(initial_x)
+    project!(x, constraints)
+    x_previous = copy(x)
 
     # Count the total number of iterations
     iteration = 0
@@ -150,7 +150,7 @@ function cg{T}(df::Union{DifferentiableFunction,
     # Store f(x) in f_x
     f_x = df.fg!(x, gr)
     @assert typeof(f_x) == T
-    f_x_previous = convert(T, NaN)
+    f_x_previous = convert(T,NaN)
     f_calls, g_calls = f_calls + 1, g_calls + 1
     copy!(gr_previous, gr)
 
@@ -165,7 +165,7 @@ function cg{T}(df::Union{DifferentiableFunction,
 
     # Trace the history of states visited
     tr = OptimizationTrace()
-    tracing = store_trace || show_trace || extended_trace || callback != nothing
+    tracing = store_trace || show_trace || extended_trace
     @cgtrace
 
     # Output messages
@@ -195,12 +195,12 @@ function cg{T}(df::Union{DifferentiableFunction,
         iteration += 1
 
         # Reset the search direction if it becomes corrupted
-        dphi0 = vecdot(gr, s)
+        dphi0 = dot(gr, s)
         if dphi0 >= 0
             for i in 1:n
                 @inbounds s[i] = -gr[i]
             end
-            dphi0 = vecdot(gr, s)
+            dphi0 = dot(gr, s)
             if dphi0 < 0
                 break
             end
@@ -212,23 +212,28 @@ function cg{T}(df::Union{DifferentiableFunction,
         @assert typeof(dphi0) == T
         push!(lsr, zero(T), f_x, dphi0)
 
+        alphamax = interior ? toedge(x, s, constraints) : convert(T,Inf)
+
         # Pick the initial step size (HZ #I1-I2)
         alpha, mayterminate, f_update, g_update =
-          alphatry(alpha, df, x, s, x_ls, gr_ls, lsr)
+          alphatry(alpha, df, x, s, x_ls, gr_ls, lsr, constraints, alphamax)
         f_calls, g_calls = f_calls + f_update, g_calls + g_update
+
+        if alpha == zero(T)
+            x_converged = true
+            break
+        end
 
         # Determine the distance of movement along the search line
         alpha, f_update, g_update =
-          linesearch!(df, x, s, x_ls, gr_ls, lsr, alpha, mayterminate)
+          linesearch!(df, x, s, x_ls, gr_ls, lsr, alpha, mayterminate, constraints, alphamax)
         f_calls, g_calls = f_calls + f_update, g_calls + g_update
 
         # Maintain a record of previous position
         copy!(x_previous, x)
 
         # Update current position
-        for i in 1:n
-            @inbounds x[i] = x[i] + alpha * s[i]
-        end
+        step!(x, x, s, alpha, constraints)
 
         # Maintain a record of the previous gradient
         copy!(gr_previous, gr)
@@ -258,14 +263,14 @@ function cg{T}(df::Union{DifferentiableFunction,
         #  Calculate the beta factor (HZ2012)
         precondprep(P, x)
         dPd = cg_precondinvdot(s, P, s)
-        etak::T = eta * vecdot(s, gr_previous) / dPd
+        etak::T = eta * dot(s, gr_previous) / dPd
         for i in 1:n
             @inbounds y[i] = gr[i] - gr_previous[i]
         end
-        ydots = vecdot(y, s)
+        ydots = dot(y, s)
         cg_precondfwd(pgr, P, gr)
-        betak = (vecdot(y, pgr) - cg_precondfwddot(y, P, y) *
-                 vecdot(gr, s) / ydots) / ydots
+        betak = (dot(y, pgr) - cg_precondfwddot(y, P, y) *
+                 dot(gr, s) / ydots) / ydots
         beta = max(betak, etak)
         for i in 1:n
             @inbounds s[i] = beta * s[i] - pgr[i]
@@ -277,7 +282,7 @@ function cg{T}(df::Union{DifferentiableFunction,
     return MultivariateOptimizationResults("Conjugate Gradient",
                                            initial_x,
                                            x,
-                                           Float64(f_x),
+                                           @compat(Float64(f_x)),
                                            iteration,
                                            iteration == iterations,
                                            x_converged,

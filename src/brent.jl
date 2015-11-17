@@ -13,9 +13,7 @@ macro brenttrace()
                     NaN,
                     dt,
                     store_trace,
-                    show_trace,
-                    show_every,
-                    callback)
+                    show_trace)
         end
     end
 end
@@ -26,8 +24,6 @@ function brent{T <: AbstractFloat}(f::Function, x_lower::T, x_upper::T;
                                    iterations::Integer = 1_000,
                                    store_trace::Bool = false,
                                    show_trace::Bool = false,
-                                   callback = nothing,
-                                   show_every = 1,
                                    extended_trace::Bool = false)
 
     if !(x_lower < x_upper)
@@ -58,7 +54,7 @@ function brent{T <: AbstractFloat}(f::Function, x_lower::T, x_upper::T;
 
     # Trace the history of states visited
     tr = OptimizationTrace()
-    tracing = store_trace || show_trace || extended_trace || callback != nothing
+    tracing = store_trace || show_trace || extended_trace
     @brenttrace
 
     while it < iterations
@@ -154,7 +150,7 @@ function brent{T <: AbstractFloat}(f::Function, x_lower::T, x_upper::T;
                                          initial_lower,
                                          initial_upper,
                                          x_minimum,
-                                         Float64(f_minimum),
+                                         @compat(Float64(f_minimum)),
                                          it,
                                          converged,
                                          rel_tol,

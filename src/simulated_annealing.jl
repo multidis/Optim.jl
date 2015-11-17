@@ -24,9 +24,7 @@ macro satrace()
                     grnorm,
                     dt,
                     store_trace,
-                    show_trace,
-                    show_every,
-                    callback)
+                    show_trace)
         end
     end
 end
@@ -39,8 +37,6 @@ function simulated_annealing{T}(cost::Function,
                                 iterations::Integer = 100_000,
                                 store_trace::Bool = false,
                                 show_trace::Bool = false,
-                                callback = nothing,
-                                show_every = 1,
                                 extended_trace::Bool = false)
     # Maintain current and proposed state
     x, x_proposal = copy(initial_x), copy(initial_x)
@@ -64,7 +60,7 @@ function simulated_annealing{T}(cost::Function,
 
     # Trace the history of states visited
     tr = OptimizationTrace()
-    tracing = store_trace || show_trace || extended_trace || callback != nothing
+    tracing = store_trace || show_trace || extended_trace
     @satrace
 
     # We always perform a fixed number of iterations
@@ -107,7 +103,7 @@ function simulated_annealing{T}(cost::Function,
     return MultivariateOptimizationResults("Simulated Annealing",
                                            initial_x,
                                            best_x,
-                                           Float64(best_f_x),
+                                           @compat(Float64(best_f_x)),
                                            iterations,
                                            iteration == iterations,
                                            false,

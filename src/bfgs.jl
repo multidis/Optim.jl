@@ -18,9 +18,7 @@ macro bfgstrace()
                     grnorm,
                     dt,
                     store_trace,
-                    show_trace,
-                    show_every,
-                    callback)
+                    show_trace)
         end
     end
 end
@@ -36,8 +34,6 @@ function bfgs{T}(d::Union{DifferentiableFunction,
                  store_trace::Bool = false,
                  show_trace::Bool = false,
                  extended_trace::Bool = false,
-                 callback = nothing,
-                 show_every = 1,
                  linesearch!::Function = hz_linesearch!)
 
     # Maintain current state in x and previous state in x_previous
@@ -89,7 +85,7 @@ function bfgs{T}(d::Union{DifferentiableFunction,
 
     # Trace the history of states visited
     tr = OptimizationTrace()
-    tracing = store_trace || show_trace || extended_trace || callback != nothing
+    tracing = store_trace || show_trace || extended_trace
     @bfgstrace
 
     # Assess multiple types of convergence
@@ -109,14 +105,14 @@ function bfgs{T}(d::Union{DifferentiableFunction,
         end
 
         # Refresh the line search cache
-        dphi0 = vecdot(gr, s)
+        dphi0 = dot(gr, s)
         # If invH is not positive definite, reset it to I
         if dphi0 > 0.0
             copy!(invH, I)
             for i in 1:n
                 @inbounds s[i] = -gr[i]
             end
-            dphi0 = vecdot(gr, s)
+            dphi0 = dot(gr, s)
         end
         clear!(lsr)
         push!(lsr, zero(T), f_x, dphi0)
@@ -160,13 +156,13 @@ function bfgs{T}(d::Union{DifferentiableFunction,
         end
 
         # Update the inverse Hessian approximation using Sherman-Morrison
-        dx_dgr = vecdot(dx, dgr)
+        dx_dgr = dot(dx, dgr)
         if dx_dgr == 0.0
             break
         end
         A_mul_B!(u, invH, dgr)
 
-        c1 = (dx_dgr + vecdot(dgr, u)) / (dx_dgr * dx_dgr)
+        c1 = (dx_dgr + dot(dgr, u)) / (dx_dgr * dx_dgr)
         c2 = 1 / dx_dgr
 
         # invH = invH + c1 * (s * s') - c2 * (u * s' + s * u')
@@ -182,7 +178,7 @@ function bfgs{T}(d::Union{DifferentiableFunction,
     return MultivariateOptimizationResults("BFGS",
                                            initial_x,
                                            x,
-                                           Float64(f_x),
+                                           @compat(Float64(f_x)),
                                            iteration,
                                            iteration == iterations,
                                            x_converged,

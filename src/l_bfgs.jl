@@ -11,15 +11,15 @@ function twoloop!(s::Vector,
                   dx_history::Matrix,
                   dgr_history::Matrix,
                   m::Integer,
-                  pseudo_iteration::Integer,
+                  iteration::Integer,
                   alpha::Vector,
                   q::Vector)
     # Count number of parameters
     n = length(s)
 
     # Determine lower and upper bounds for loops
-    lower = pseudo_iteration - m
-    upper = pseudo_iteration - 1
+    lower = iteration - m
+    upper = iteration - 1
 
     # Copy gr into q for backward pass
     copy!(q, gr)
@@ -30,7 +30,7 @@ function twoloop!(s::Vector,
             continue
         end
         i = mod1(index, m)
-        @inbounds alpha[i] = rho[i] * vecdot(dx_history[:, i], q)
+        @inbounds alpha[i] = rho[i] * dot(dx_history[:, i], q)
         for j in 1:n
             @inbounds q[j] -= alpha[i] * dgr_history[j, i]
         end
@@ -45,7 +45,7 @@ function twoloop!(s::Vector,
             continue
         end
         i = mod1(index, m)
-        @inbounds beta = rho[i] * vecdot(dgr_history[:, i], s)
+        @inbounds beta = rho[i] * dot(dgr_history[:, i], s)
         for j in 1:n
             @inbounds s[j] += dx_history[j, i] * (alpha[i] - beta)
         end
@@ -75,9 +75,7 @@ macro lbfgstrace()
                     grnorm,
                     dt,
                     store_trace,
-                    show_trace,
-                    show_every,
-                    callback)
+                    show_trace)
         end
     end
 end
@@ -85,6 +83,8 @@ end
 function l_bfgs{T}(d::Union{DifferentiableFunction,
                             TwiceDifferentiableFunction},
                    initial_x::Vector{T};
+                   constraints::AbstractConstraints = ConstraintsNone(),
+                   interior::Bool = false,
                    m::Integer = 10,
                    xtol::Real = 1e-32,
                    ftol::Real = 1e-8,
@@ -93,8 +93,6 @@ function l_bfgs{T}(d::Union{DifferentiableFunction,
                    store_trace::Bool = false,
                    show_trace::Bool = false,
                    extended_trace::Bool = false,
-                   callback = nothing,
-                   show_every = 1,
                    linesearch!::Function = hz_linesearch!)
 
     # Maintain current state in x and previous state in x_previous
@@ -102,7 +100,6 @@ function l_bfgs{T}(d::Union{DifferentiableFunction,
 
     # Count the total number of iterations
     iteration = 0
-    pseudo_iteration = 0
 
     # Track calls to function and gradient
     f_calls, g_calls = 0, 0
@@ -145,7 +142,7 @@ function l_bfgs{T}(d::Union{DifferentiableFunction,
 
     # Trace the history of states visited
     tr = OptimizationTrace()
-    tracing = store_trace || show_trace || extended_trace || callback != nothing
+    tracing = store_trace || show_trace || extended_trace
     @lbfgstrace
 
     # Assess multiple types of convergence
@@ -153,31 +150,44 @@ function l_bfgs{T}(d::Union{DifferentiableFunction,
 
     # Iterate until convergence
     converged = false
+    converged_iteration = typemin(Int)
     while !converged && iteration < iterations
         # Increment the number of steps we've had to perform
         iteration += 1
-        pseudo_iteration += 1
 
         # Determine the L-BFGS search direction
-        twoloop!(s, gr, rho, dx_history, dgr_history, m, pseudo_iteration,
+        twoloop!(s, gr, rho, dx_history, dgr_history, m, iteration,
                  twoloop_alpha, twoloop_q)
 
         # Refresh the line search cache
-        dphi0 = vecdot(gr, s)
-        if dphi0 > 0.0
-            pseudo_iteration = 1
-            for i in 1:n
+        dphi0 = dot(gr, s)
+        if dphi0 >= 0
+            # The search direction is not a descent direction. Something
+            # is wrong, so restart the search-direction algorithm.
+            # See also the "restart" below.
+            iteration = 1
+            for i = 1:n
                 @inbounds s[i] = -gr[i]
             end
-            dphi0 = _dot(gr, s)
+            dphi0 = dot(gr, s)
         end
-
+        dphi0 == 0 && break   # we're at a stationary point
         clear!(lsr)
         push!(lsr, zero(T), f_x, dphi0)
 
+        alphamax = interior ? toedge(x, s, constraints) : convert(T,Inf)
+
+        # Pick the initial step size (HZ #I1-I2). Even though we might
+        # guess alpha=1 for l_bfgs most of the time, testing suggests
+        # this is still usually a good idea (fewer total function and
+        # gradient evaluations).
+        alpha, mayterminate, f_update, g_update =
+            alphatry(alpha, d, x, s, x_ls, gr_ls, lsr, constraints, alphamax)
+        f_calls, g_calls = f_calls + f_update, g_calls + g_update
+
         # Determine the distance of movement along the search line
         alpha, f_update, g_update =
-          linesearch!(d, x, s, x_ls, gr_ls, lsr, alpha, mayterminate)
+          linesearch!(d, x, s, x_ls, gr_ls, lsr, alpha, mayterminate, constraints, alphamax)
         f_calls, g_calls = f_calls + f_update, g_calls + g_update
 
         # Maintain a record of previous position
@@ -202,14 +212,14 @@ function l_bfgs{T}(d::Union{DifferentiableFunction,
         end
 
         # Update the L-BFGS history of positions and gradients
-        rho_iteration = 1 / vecdot(dx, dgr)
+        rho_iteration = 1 / dot(dx, dgr)
         if isinf(rho_iteration)
             # TODO: Introduce a formal error? There was a warning here previously
             break
         end
-        dx_history[:, mod1(pseudo_iteration, m)] = dx
-        dgr_history[:, mod1(pseudo_iteration, m)] = dgr
-        rho[mod1(pseudo_iteration, m)] = rho_iteration
+        dx_history[:, mod1(iteration, m)] = dx
+        dgr_history[:, mod1(iteration, m)] = dgr
+        rho[mod1(iteration, m)] = rho_iteration
 
         x_converged,
         f_converged,
@@ -224,12 +234,32 @@ function l_bfgs{T}(d::Union{DifferentiableFunction,
                                        grtol)
 
         @lbfgstrace
+
+        # If we think we've converged, restart and make sure we don't
+        # have another long descent. This should catch the case where
+        # dphi < 0 "by a hair," meaning that the chosen search direction
+        # happened to be nearly orthogonoal to the gradient.
+        if converged
+            if iteration <= 3 || converged_iteration >= 0
+                if iteration <= max(m, 3)
+                    break  # we converged quickly after previous restart
+                end
+                converged_iteration += iteration
+            else
+                converged_iteration = iteration
+            end
+            converged = false
+            iteration = 0  # the next search direction will be -gr
+        end
     end
 
+    if converged_iteration >= 0
+        iteration += converged_iteration
+    end
     return MultivariateOptimizationResults("L-BFGS",
                                            initial_x,
                                            x,
-                                           Float64(f_x),
+                                           @compat(Float64(f_x)),
                                            iteration,
                                            iteration == iterations,
                                            x_converged,

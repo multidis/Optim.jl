@@ -6,11 +6,11 @@ immutable OptimizationState
 end
 
 function OptimizationState(i::Integer, f::Real)
-    OptimizationState(int(i), Float64(f), NaN, Dict())
+    OptimizationState(int(i), @compat(Float64(f)), NaN, Dict())
 end
 
 function OptimizationState(i::Integer, f::Real, g::Real)
-    OptimizationState(int(i), Float64(f), Float64(g), Dict())
+    OptimizationState(int(i), @compat(Float64(f)), @compat(Float64(g)), Dict())
 end
 
 immutable OptimizationTrace
@@ -102,16 +102,8 @@ end
 function Base.show(io::IO, r::MultivariateOptimizationResults)
     @printf io "Results of Optimization Algorithm\n"
     @printf io " * Algorithm: %s\n" r.method
-    if length(join(r.initial_x, ",")) < 40
-        @printf io " * Starting Point: [%s]\n" join(r.initial_x, ",")
-    else
-        @printf io " * Starting Point: [%s, ...]\n" join(r.initial_x[1:2], ",")
-    end
-    if length(join(r.minimum, ",")) < 40
-        @printf io " * Minimum: [%s]\n" join(r.minimum, ",")
-    else
-        @printf io " * Minimum: [%s, ...]\n" join(r.minimum[1:2], ",")
-    end
+    @printf io " * Starting Point: [%s]\n" join(r.initial_x, ",")
+    @printf io " * Minimum: [%s]\n" join(r.minimum, ",")
     @printf io " * Value of Function at Minimum: %f\n" r.f_minimum
     @printf io " * Iterations: %d\n" r.iterations
     @printf io " * Convergence: %s\n" converged(r)
@@ -136,7 +128,7 @@ function Base.show(io::IO, r::UnivariateOptimizationResults)
     @printf io " * Value of Function at Minimum: %f\n" r.f_minimum
     @printf io " * Iterations: %d\n" r.iterations
     @printf io " * Convergence: max(|x - x_upper|, |x - x_lower|) <= 2*(%.1e*|x|+%.1e): %s\n" r.rel_tol r.abs_tol r.converged
-    @printf io " * Objective Function Calls: %d" r.f_calls
+    @printf io " * Objective Function Calls: %d\n" r.f_calls
     return
 end
 

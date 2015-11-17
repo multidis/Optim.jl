@@ -34,9 +34,7 @@ macro nmtrace()
                     grnorm,
                     dt,
                     store_trace,
-                    show_trace,
-                    show_every,
-                    callback)
+                    show_trace)
         end
     end
 end
@@ -51,8 +49,6 @@ function nelder_mead{T}(f::Function,
                         iterations::Integer = 1_000,
                         store_trace::Bool = false,
                         show_trace::Bool = false,
-                        callback = nothing,
-                        show_every = 1,
                         extended_trace::Bool = false)
     # Set up a simplex of points around starting value
     m = length(initial_x)
@@ -73,6 +69,7 @@ function nelder_mead{T}(f::Function,
     for i in 1:n
         @inbounds y[i] = f(p[:, i])
     end
+    any(isfinite(y)) || error("At least one of the starting points must have finite penalty")
     f_calls += n
 
     f_x_previous, f_x = NaN, nmobjective(y, m, n)
@@ -82,7 +79,7 @@ function nelder_mead{T}(f::Function,
 
     # Maintain a trace
     tr = OptimizationTrace()
-    tracing = show_trace || store_trace || extended_trace || callback != nothing
+    tracing = show_trace || store_trace || extended_trace
     @nmtrace
 
     # Cache p_bar, y_bar, p_star and p_star_star
@@ -190,7 +187,7 @@ function nelder_mead{T}(f::Function,
     return MultivariateOptimizationResults("Nelder-Mead",
                                            initial_x,
                                            minimum,
-                                           Float64(f(minimum)),
+                                           @compat(Float64(f(minimum))),
                                            iteration,
                                            iteration == iterations,
                                            false,

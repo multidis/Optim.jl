@@ -13,9 +13,7 @@ macro gdtrace()
                     grnorm,
                     dt,
                     store_trace,
-                    show_trace,
-                    show_every,
-                    callback)
+                    show_trace)
         end
     end
 end
@@ -30,8 +28,6 @@ function gradient_descent{T}(d::Union{DifferentiableFunction,
                              store_trace::Bool = false,
                              show_trace::Bool = false,
                              extended_trace::Bool = false,
-                             callback = nothing,
-                             show_every = 1,
                              linesearch!::Function = hz_linesearch!)
 
     # Maintain current state in x and previous state in x_previous
@@ -71,7 +67,7 @@ function gradient_descent{T}(d::Union{DifferentiableFunction,
 
     # Trace the history of states visited
     tr = OptimizationTrace()
-    tracing = store_trace || show_trace || extended_trace || callback != nothing
+    tracing = store_trace || show_trace || extended_trace
     @gdtrace
 
     # Assess multiple types of convergence
@@ -89,7 +85,7 @@ function gradient_descent{T}(d::Union{DifferentiableFunction,
         end
 
         # Refresh the line search cache
-        dphi0 = vecdot(gr, s)
+        dphi0 = dot(gr, s)
         clear!(lsr)
         push!(lsr, zero(T), f_x, dphi0)
 
@@ -128,7 +124,7 @@ function gradient_descent{T}(d::Union{DifferentiableFunction,
     return MultivariateOptimizationResults("Gradient Descent",
                                            initial_x,
                                            x,
-                                           Float64(f_x),
+                                           @compat(Float64(f_x)),
                                            iteration,
                                            iteration == iterations,
                                            x_converged,

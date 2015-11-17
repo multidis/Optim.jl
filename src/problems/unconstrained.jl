@@ -1,12 +1,5 @@
 module UnconstrainedProblems
 
-### Sources
-###
-### [1] Ali, Khompatraporn, & Zabinsky: A Numerical Evaluation of Several Stochastic Algorithms on Selected Continuous Global Optimization Test
-### Link: www.researchgate.net/profile/Montaz_Ali/publication/226654862_A_Numerical_Evaluation_of_Several_Stochastic_Algorithms_on_Selected_Continuous_Global_Optimization_Test_Problems/links/00b4952bef133a1a6b000000.pdf
-###
-### [2] Fletcher & Powell: A rapidly convergent descent method for minimization,
-
 immutable OptimizationProblem
     name::ASCIIString
     f::Function
@@ -47,7 +40,7 @@ examples["Exponential"] = OptimizationProblem("Exponential",
                                               exponential_gradient!,
                                               exponential_hessian!,
                                               [0.0, 0.0],
-                                              [2.0, 3.0],
+                                              Any[[2.0, 3.0]],
                                               true,
                                               true)
 
@@ -55,9 +48,6 @@ examples["Exponential"] = OptimizationProblem("Exponential",
 ###
 ### Fletcher-Powell
 ###
-### From [2]
-### Source: A rapidly convergent descent method for minimization
-###         Fletcher & Powell
 ##########################################################################
 
 function fletcher_powell(x::Vector)
@@ -87,75 +77,70 @@ examples["Fletcher-Powell"] = OptimizationProblem("Fletcher-Powell",
                                                   fletcher_powell,
                                                   fletcher_powell_gradient!,
                                                   fletcher_powell_hessian!,
-                                                  [-1.0, 0.0, 0.0], # Same as in source
-                                                  [1.0, 0.0, 0.0],
+                                                  [0.0, 0.0, 0.0],
+                                                  Any[[0.0, 0.0, 0.0]], # TODO: Fix
                                                   false,
                                                   false)
 
 ##########################################################################
 ###
-### Himmelblau's Function
+### Himmelbrau's Function
 ###
 ##########################################################################
 
-function himmelblau(x::Vector)
+function himmelbrau(x::Vector)
     return (x[1]^2 + x[2] - 11)^2 + (x[1] + x[2]^2 - 7)^2
 end
 
-function himmelblau_gradient!(x::Vector, storage::Vector)
+function himmelbrau_gradient!(x::Vector, storage::Vector)
     storage[1] = 4.0 * x[1]^3 + 4.0 * x[1] * x[2] -
                   44.0 * x[1] + 2.0 * x[1] + 2.0 * x[2]^2 - 14.0
     storage[2] = 2.0 * x[1]^2 + 2.0 * x[2] - 22.0 +
                   4.0 * x[1] * x[2] + 4.0 * x[2]^3 - 28.0 * x[2]
 end
 
-function himmelblau_hessian!(x::Vector, storage::Matrix)
-    storage[1, 1] = 12.0 * x[1]^2 + 4.0 * x[2] - 42.0
-    storage[1, 2] = 4.0 * x[1] + 4.0 * x[2]
-    storage[2, 1] = 4.0 * x[1] + 4.0 * x[2]
-    storage[2, 2] = 12.0 * x[2]^2 + 4.0 * x[1] - 26.0
+# TODO: Implement
+function himmelbrau_hessian!(x::Vector, storage::Matrix)
+    return
 end
 
-examples["Himmelblau"] = OptimizationProblem("Himmelblau",
-                                             himmelblau,
-                                             himmelblau_gradient!,
-                                             himmelblau_hessian!,
-                                             [2.0, 2.0],
-                                             [3.0, 2.0],
+examples["Himmelbrau"] = OptimizationProblem("Himmelbrau",
+                                             himmelbrau,
+                                             himmelbrau_gradient!,
+                                             himmelbrau_hessian!,
+                                             [0.0, 0.0],
+                                             Any[[1.0, 0.0]], # TODO: Fix
                                              true,
-                                             true)
+                                             false)
 ##########################################################################
 ###
-### Hosaki's Problem
+### Hosaki
 ###
-### Problem 20 in [1]
+### REF: http://infinity77.net/global_optimization/test_functions_nd_H.html
 ##########################################################################
 
 function hosaki(x::Vector)
-    a = (1.0 - 8.0 * x[1] + 7.0 * x[1]^2 - (7.0 / 3.0) * x[1]^3 + (1.0 / 4.0) * x[1]^4)
+    a = (1 - 8 * x[1] + 7 * x[1]^2 - (7 / 3) * x[1]^3 + (1 / 4) * x[1]^4)
     return a * x[2]^2 * exp(-x[2])
 end
 
 function hosaki_gradient!(x::Vector, storage::Vector)
-    storage[1] = (x[1]^3 - 7.0 * x[1]^2 + 14.0 * x[1] - 8)* x[2]^2 * exp(-x[2])
-    storage[2] = 2.0 * (1.0 - 8.0 * x[1] + 7.0 * x[1]^2 - (7.0 / 3.0) * x[1]^3 + (1.0 / 4.0) * x[1]^4) * x[2] * exp(-x[2]) - (1.0 - 8.0 * x[1] + 7.0 * x[1]^2 - (7.0 / 3.0) * x[1]^3 + (1.0 / 4.0) * x[1]^4) * x[2]^2 * exp(-x[2])
+    return
 end
 
+# TODO: Implement
 function hosaki_hessian!(x::Vector, storage::Matrix)
-    storage[1, 1] = (3.0 * x[1]^2 - 14.0 * x[1] + 14.0) * x[2]^2 * exp(-x[2])
-    storage[1, 2] = 2.0 * (x[1]^3 - 7.0 * x[1]^2 + 14.0 * x[1] - 8.0) * x[2] * exp(-x[2])  - (x[1]^3 - 7.0 * x[1]^2 + 14.0 * x[1] - 8.0) * x[2]^2 * exp(-x[2])
-    storage[2, 1] =  2.0 * (x[1]^3 - 7.0 * x[1]^2 + 14.0 * x[1] - 8.0) * x[2] * exp(-x[2])  - (x[1]^3 - 7.0 * x[1]^2 + 14.0 * x[1] - 8.0) * x[2]^2 * exp(-x[2])
-    storage[2, 2] = 2.0 * (1.0 - 8.0 * x[1] + 7.0 * x[1]^2 - (7.0 / 3.0) * x[1]^3 + (1.0 / 4.0) * x[1]^4) * exp(-x[2]) - 4.0 * ( 1.0 - 8.0 * x[1] + 7.0 *  x[1]^2 - (7.0 / 3.0) * x[1]^3 + (1.0 / 4.0) * x[1]^4) * x[2] * exp(-x[2]) + (1.0 - 8.0 * x[1] + 7.0 * x[1]^2 - (7.0 / 3.0) * x[1]^3 + (1.0 / 4.0) * x[1]^4) * x[2]^2 * exp(-x[2])
+    return
 end
 
 examples["Hosaki"] = OptimizationProblem("Hosaki",
                                          hosaki,
                                          hosaki_gradient!,
                                          hosaki_hessian!,
-                                         [3.6, 1.9],
-                                         [4.0, 2.0],
-                                         true,
-                                         true)
+                                         [0.0, 0.0],
+                                         Any[[4.0, 2.0]],
+                                         false,
+                                         false)
 
 ##########################################################################
 ###
@@ -195,7 +180,7 @@ examples["Large Polynomial"] = OptimizationProblem("Large Polynomial",
                                                    large_polynomial_gradient!,
                                                    large_polynomial_hessian!,
                                                    zeros(250),
-                                                   float([1:250;]),
+                                                   Any[float([1:250;])],
                                                    true,
                                                    true)
 
@@ -235,7 +220,7 @@ examples["Parabola"] = OptimizationProblem("Parabola",
                                            parabola_gradient!,
                                            parabola_hessian!,
                                            [0.0, 0.0, 0.0, 0.0, 0.0],
-                                           [1.0, 2.0, 3.0, 5.0, 8.0],
+                                           Any[[1.0, 2.0, 3.0, 5.0, 8.0]],
                                            true,
                                            true)
 
@@ -272,16 +257,14 @@ examples["Polynomial"] = OptimizationProblem("Polynomial",
                                              polynomial_gradient!,
                                              polynomial_hessian!,
                                              [0.0, 0.0, 0.0],
-                                             [10.0, 7.0, 108.0],
+                                             Any[[10.0, 7.0, 108.0]],
                                              true,
                                              true)
 
 ##########################################################################
 ###
-### Powell (d=4)
+### Powell
 ###
-### Problem 35 in [1]
-### Difficuly since the hessian is singular at the optimum
 ##########################################################################
 
 function powell(x::Vector)
@@ -320,17 +303,14 @@ examples["Powell"] = OptimizationProblem("Powell",
                                          powell_gradient!,
                                          powell_hessian!,
                                          [3.0, -1.0, 0.0, 1.0],
-                                         [0.0, 0.0, 0.0, 0.0],
+                                         Any[[0.0, 0.0, 0.0, 0.0]], # TODO: Fix
                                          true,
                                          true)
 
 ##########################################################################
 ###
-### Rosenbrock (2D)
+### Rosenbrock
 ###
-### Problem 38 in [1]
-###
-### Saddle point makes optimization difficult
 ##########################################################################
 
 function rosenbrock(x::Vector)
@@ -354,7 +334,7 @@ examples["Rosenbrock"] = OptimizationProblem("Rosenbrock",
                                              rosenbrock_gradient!,
                                              rosenbrock_hessian!,
                                              [0.0, 0.0],
-                                             [1.0, 1.0],
+                                             Any[[1.0, 1.0]],
                                              true,
                                              true)
 

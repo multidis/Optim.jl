@@ -16,9 +16,7 @@ macro mgdtrace()
                     grnorm,
                     dt,
                     store_trace,
-                    show_trace,
-                    show_every,
-                    callback)
+                    show_trace)
         end
     end
 end
@@ -33,8 +31,6 @@ function momentum_gradient_descent{T}(d::DifferentiableFunction,
                                       store_trace::Bool = false,
                                       show_trace::Bool = false,
                                       extended_trace::Bool = false,
-                                      callback = nothing,
-                                      show_every = 1,
                                       linesearch!::Function = hz_linesearch!)
     # Maintain current state in x and previous state in x_previous
     x, x_previous = copy(initial_x), copy(initial_x)
@@ -72,7 +68,7 @@ function momentum_gradient_descent{T}(d::DifferentiableFunction,
 
     # Trace the history of states visited
     tr = OptimizationTrace()
-    tracing = store_trace || show_trace || extended_trace || callback != nothing
+    tracing = store_trace || show_trace || extended_trace
     @mgdtrace
 
     # Assess multiple types of convergence
@@ -90,7 +86,7 @@ function momentum_gradient_descent{T}(d::DifferentiableFunction,
         end
 
         # Refresh the line search cache
-        dphi0 = vecdot(gr, s)
+        dphi0 = dot(gr, s)
         clear!(lsr)
         push!(lsr, zero(T), f_x, dphi0)
 
@@ -129,7 +125,7 @@ function momentum_gradient_descent{T}(d::DifferentiableFunction,
     return MultivariateOptimizationResults("Momentum Gradient Descent",
                                            initial_x,
                                            x,
-                                           Float64(f_x),
+                                           @compat(Float64(f_x)),
                                            iteration,
                                            iteration == iterations,
                                            x_converged,
