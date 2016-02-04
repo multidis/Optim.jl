@@ -1,9 +1,6 @@
 Optim.jl
 ========
 
-[![Optim](http://pkg.julialang.org/badges/Optim_0.3.svg)](http://pkg.julialang.org/?pkg=Optim&ver=0.3)
-[![Optim](http://pkg.julialang.org/badges/Optim_0.4.svg)](http://pkg.julialang.org/?pkg=Optim&ver=0.4)
-
 The Optim package represents an ongoing project to implement basic optimization algorithms in pure Julia under an MIT license. Because it is being developed from scratch, it is not as robust as the C-based NLOpt package. For work whose accuracy must be unquestionable, we recommend using the NLOpt package. See [the NLOpt.jl GitHub repository](https://github.com/stevengj/NLopt.jl) for details.
 
 Although Optim is a work in progress, it is quite usable as is. In what follows, we describe the Optim package's API.
@@ -85,38 +82,6 @@ Like gradients, the Hessian function will be ignored if you use a method that do
 ```
 
 Note that Optim will not generate approximate Hessians using finite differencing because of the potentially low accuracy of approximations to the Hessians. Other than Newton's method, none of the algorithms provided by the Optim package employ exact Hessians.
-
-# Optimizing Functions that Depend on Constant Parameters
-
-In various fields, one sometimes needs to optimize a function that depends upon a set of parameters that are effectively constant with respect to the optimization procedure.
-
-For example, in statistical computing, one frequently needs to optimize a "likelihood" function that depends on both (a) a set of model parameters and (a) a set of observed data points. As far as the `optimize` function is concerned, all function arguments are not constants, so one needs to define a specialized function that has all of the constants hardcoded into it.
-
-We can do this using closures. For example, suppose that the observed data is found in the variables `x` and `y`:
-
-```jl
-x = [1.0, 2.0, 3.0]
-y = 1.0 + 2.0 * x + [-0.3, 0.3, -0.1]
-```
-
-With the `x` and `y` variables present in the current scope, we can define a closure that is aware of the observed data, but depends only on the model parameters:
-
-```jl
-function sqerror(betas)
-    err = 0.0
-    for i in 1:length(x)
-        pred_i = betas[1] + betas[2] * x[i]
-        err += (y[i] - pred_i)^2
-    end
-    return err
-end
-```
-
-We can then optimize the `sqerror` function just like any other function:
-
-```jl
-res = optimize(sqerror, [0.0, 0.0], method = :l_bfgs)
-```
 
 # Configurable Options
 
