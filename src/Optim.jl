@@ -1,10 +1,11 @@
 isdefined(Base, :__precompile__) && __precompile__()
 
 module Optim
-    using Calculus, PositiveFactorizations
+    using Calculus
     using Compat
 
-    import Base.length,
+    import Base.dot,
+           Base.length,
            Base.push!,
            Base.show,
            Base.getindex,
